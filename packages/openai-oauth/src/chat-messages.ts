@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer"
 import { jsonSchema, type ModelMessage, tool } from "ai"
 import { isJsonValue, isRecord } from "./shared.js"
 import type {
@@ -81,7 +82,7 @@ const toUserContent = (content: unknown) => {
 
 	const parts: Array<
 		| { type: "text"; text: string }
-		| { type: "image"; image: URL; mediaType?: string }
+		| { type: "image"; image: URL | Uint8Array; mediaType?: string }
 	> = []
 
 	for (const item of content) {
@@ -99,6 +100,18 @@ const toUserContent = (content: unknown) => {
 			isRecord(item.image_url) &&
 			typeof item.image_url.url === "string"
 		) {
+			// Inline images must be bytes: URL objects trigger the SDK's HTTP downloader.
+			const dataImage = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/s.exec(
+				item.image_url.url,
+			)
+			if (dataImage) {
+				parts.push({
+					type: "image",
+					image: Buffer.from(dataImage[2] ?? "", "base64"),
+					mediaType: dataImage[1],
+				})
+				continue
+			}
 			try {
 				parts.push({ type: "image", image: new URL(item.image_url.url) })
 			} catch {}
